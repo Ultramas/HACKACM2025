@@ -50,7 +50,7 @@ STRIPE_KEY = 'SECRET'
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['54.183.195.21', 'localhost', '127.0.0.1', 'webapp-2487358.pythonanywhere.com', '*']
+ALLOWED_HOSTS = ['*']
 
 
 # Application definition
@@ -66,20 +66,6 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'django_otp',
-    'django_otp.plugins.otp_totp',
-    'crispy_forms',
-    'crispy_bootstrap4',
-    'django_private_chat2.apps.DjangoPrivateChat2Config',
-    "guest_user",
-    "social_django",
-    'widget_tweaks',
-    "guest_user.contrib.allauth",
-    'changelogs',
-    'favicon',
-    'rest_framework',
-    'sslserver',
-    'showcase.apps.ShowcaseConfig',
 ]
 
 REST_FRAMEWORK = {
@@ -210,30 +196,8 @@ import environ
 env = environ.Env()
 environ.Env.read_env()
 
-# config/settings.py
-CRISPY_TEMPLATE_PACK = 'bootstrap4'
-# EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_BACKEND='django.core.mail.backends.smtp.EmailBackend'  # new
-# DEFAULT_FROM_EMAIL='poketrovecompany@gmail.com'
-EMAIL_HOST=env('EMAIL_HOST')  # new
-EMAIL_HOST_USER=env('EMAIL_HOST_USER')  # new
-EMAIL_HOST_PASSWORD=env('EMAIL_HOST_PASSWORD')  # new
-EMAIL_PORT=587  # new
-EMAIL_USE_TLS=True  # new
 
 
-# Custom setting. To email
-RECIPIENT_ADDRESS = env('RECIPIENT_ADDRESS')
-
-SECRET = os.getenv('payment')
-
-# stripe payment
-STRIPE_KEY = SECRET
-
-STRIPE_PUBLIC_KEY = os.getenv('STRIPE_PUBLIC_KEY')
-# possibly linked to "invalid request error (invalid parameters)" issue
-
-STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY')
 import warnings
 
 warnings.filterwarnings(
