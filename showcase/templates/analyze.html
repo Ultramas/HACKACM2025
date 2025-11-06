@@ -2,26 +2,103 @@
 <html>
 <head>
     <title>Melody Analyzer</title>
+
+    <!-- ✅ Correct VexFlow version -->
+    <script src="https://cdn.jsdelivr.net/npm/vexflow@3.0.9/build/vexflow-min.js"></script>
+
+
+    <style>
+        #staff {
+            border: 1px solid #ccc;
+            width: 600px;
+            height: 200px;
+            margin-top: 20px;
+        }
+    </style>
 </head>
+
 <body>
     <h1>Melody Analyzer</h1>
 
-    <!-- ✅ This is the form -->
-    <form method="POST">
+    <form method="POST" action="/analyze/">
         {% csrf_token %}
-        <input type="text" name="melody" placeholder="C D E F G" size="50">
+        <input type="text" name="melody" id="melody-input" placeholder="C D E F G" size="50">
         <button type="submit">Analyze</button>
     </form>
 
-    <!-- ✅ This displays your result -->
+    <!-- ✅ ONE staff -->
+    <div id="staff"></div>
+
     {% if result %}
         <h2>Score: {{ result.score }}/10</h2>
-        <h3>Feedback:</h3>
         <ul>
             {% for f in result.feedback %}
                 <li>{{ f }}</li>
             {% endfor %}
         </ul>
     {% endif %}
+
+    <script>
+const VF = Vex.Flow;
+
+let notes = [];
+
+// Create renderer
+const div = document.getElementById("staff");
+const renderer = new VF.Renderer(div, VF.Renderer.Backends.SVG);
+renderer.resize(600, 200);
+const context = renderer.getContext();
+
+// Create stave
+const stave = new VF.Stave(10, 40, 500);
+stave.addClef("treble").addTimeSignature("4/4");
+stave.setContext(context).draw();
+
+const pitches = ["G5","F5","E5","D5","C5","B4","A4","G4","F4","E4","D4","C4"];
+const staffTopY = 40;
+const staffSpacing = 10;
+
+function yToPitch(y) {
+    let index = Math.round((y - staffTopY) / staffSpacing);
+    return pitches[Math.max(0, Math.min(pitches.length - 1, index))];
+}
+
+function drawNotes() {
+    context.clear();
+    stave.setContext(context).draw();
+
+    if (notes.length === 0) return;
+
+    const vexNotes = notes.map(n =>
+        new VF.StaveNote({
+            clef: "treble",
+            keys: [n.toLowerCase()],
+            duration: "q"
+        })
+    );
+
+    VF.Formatter.FormatAndDraw(context, stave, vexNotes);
+}
+
+div.addEventListener("click", function(event){
+    const rect = div.getBoundingClientRect();
+    const y = event.clientY - rect.top;
+
+    const pitch = yToPitch(y);
+    notes.push(pitch);
+
+    document.getElementById("melody-input").value = notes.join(" ");
+    drawNotes();
+});
+
+document.addEventListener("keydown", function(event){
+    if (event.key === "Backspace") {
+        notes.pop();
+        document.getElementById("melody-input").value = notes.join(" ");
+        drawNotes();
+    }
+});
+    </script>
+
 </body>
 </html>

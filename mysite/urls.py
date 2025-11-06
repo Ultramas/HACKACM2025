@@ -77,6 +77,8 @@ urlpatterns = [
              template_name='commons/password-reset/password_reset_complete.html'
          ),
          name='password_reset_complete'),
+
+
 ]
 
 urlpatterns += staticfiles_urlpatterns()
