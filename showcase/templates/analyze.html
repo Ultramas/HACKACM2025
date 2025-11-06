@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Melody Analyzer</title>
+</head>
+<body>
+    <h1>Melody Analyzer</h1>
+
+    <!-- ✅ This is the form -->
+    <form method="POST">
+        {% csrf_token %}
+        <input type="text" name="melody" placeholder="C D E F G" size="50">
+        <button type="submit">Analyze</button>
+    </form>
+
+    <!-- ✅ This displays your result -->
+    {% if result %}
+        <h2>Score: {{ result.score }}/10</h2>
+        <h3>Feedback:</h3>
+        <ul>
+            {% for f in result.feedback %}
+                <li>{{ f }}</li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+</body>
+</html>

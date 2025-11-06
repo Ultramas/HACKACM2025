@@ -1,8 +1,10 @@
 from django.urls import path
-from django.views.generic import TemplateView
-
 from . import views
-app_name = 'showcase'
 
+app_name = 'showcase'
 urlpatterns = [
+    path("analyze/", views.analyze, name="analyze"),
+    path("", views.index, name="index"),
+    path("api_listings", views.index, name="api_listings"),
 ]
+
