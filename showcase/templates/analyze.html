@@ -1,104 +1,377 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Melody Analyzer</title>
+  <meta charset="utf-8" />
+  <title>Piano Roll (C4 → C5) — Drag to Stretch</title>
+  <style>
+    :root{
+      --cell: 24px;    /* square size for rows/cols */
+      --gap: 2px;      /* gap between cells */
+    }
 
-    <!-- ✅ Correct VexFlow version -->
-    <script src="https://cdn.jsdelivr.net/npm/vexflow@3.0.9/build/vexflow-min.js"></script>
+    body { font-family: system-ui, -apple-system, Segoe UI, Arial, sans-serif; }
+    h1 { margin-bottom: 6px; }
+    small { color: #666; }
 
+    .wrap {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      align-items: start;
+      gap: 12px;
+      margin-top: 16px;
+    }
 
-    <style>
-        #staff {
-            border: 1px solid #ccc;
-            width: 600px;
-            height: 200px;
-            margin-top: 20px;
-        }
-    </style>
+    /* =========================
+       Piano (left side)
+       ========================= */
+    #piano {
+      display: grid;
+      /* 13 rows (C4..C5) from top→bottom we’ll append reversed order */
+      grid-auto-rows: var(--cell);
+      gap: var(--gap);
+      user-select: none;
+    }
+
+    .key {
+      position: relative;
+      width: 80px;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding-right: 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      box-sizing: border-box;
+      height: var(--cell);
+    }
+    .white { background: #fff; border: 1px solid #bbb; }
+    .black { background: #111; color: #fff; border: 1px solid #000; }
+
+    .white .label, .black .label {
+      pointer-events: none;
+      color: #666;
+    }
+    .black .label { color: #ddd; }
+
+    /* =========================
+       Grid area (right side)
+       ========================= */
+    .grid-wrap {
+      position: relative; /* holds notes overlay */
+      user-select: none;
+    }
+
+    #grid {
+      display: grid;
+      /* 32 columns (two measures of eighth notes) */
+      grid-template-columns: repeat(32, var(--cell));
+      /* 13 rows to match 13 keys */
+      grid-template-rows: repeat(13, var(--cell));
+      gap: var(--gap);
+      border: 1px solid #444;
+      background: #2a2a2a;
+    }
+
+    .cell {
+      width: var(--cell);
+      height: var(--cell);
+      border: 1px solid #222;
+      background: #2f2f2f;
+      box-sizing: border-box;
+      cursor: pointer;
+    }
+
+    /* row striping to align with piano key color */
+    .row-white { background: #323232; }
+    .row-black { background: #3a3a3a; }
+
+    /* vertical bar lines each beat (every 4 eighths) */
+    .cell.beat {
+      border-left: 2px solid #555;
+    }
+
+    /* =========================
+       Notes overlay
+       ========================= */
+    #notes-overlay {
+      position: absolute;
+      left: 0;
+      top: 0;
+      pointer-events: none; /* clicks go to cells underneath */
+    }
+
+    .note {
+      position: absolute;
+      height: var(--cell);
+      background: #4caf50;
+      border: 1px solid #3f8f43;
+      border-radius: 4px;
+      box-sizing: border-box;
+      pointer-events: auto; /* allow right-click to delete */
+      cursor: grab;
+    }
+
+    /* UX */
+    #notes-display { margin-top: 10px; font-weight: 600; }
+    form { margin-top: 14px; }
+    button { padding: 8px 12px; border-radius: 6px; border: 1px solid #0a6; background: #0b5; color: #fff; cursor: pointer; }
+    button:hover { filter: brightness(0.95); }
+  </style>
 </head>
 
 <body>
-    <h1>Melody Analyzer</h1>
+  <h1>Piano Roll (Drag to Stretch)</h1>
+  <small>Two measures (4/4), 1/8 resolution — left-click & drag to create/resize, right-click to delete.</small>
 
-    <form method="POST" action="/analyze/">
-        {% csrf_token %}
-        <input type="text" name="melody" id="melody-input" placeholder="C D E F G" size="50">
-        <button type="submit">Analyze</button>
-    </form>
+  <!-- Post to Django view -->
+  <form method="POST" action="/analyze/">
+    {% csrf_token %}
+    <input type="hidden" id="melody-input" name="melody" />
+    <button type="submit">Analyze Melody</button>
+  </form>
 
-    <!-- ✅ ONE staff -->
-    <div id="staff"></div>
+  <div class="wrap">
+    <!-- Piano -->
+    <div id="piano"></div>
 
-    {% if result %}
-        <h2>Score: {{ result.score }}/10</h2>
-        <ul>
-            {% for f in result.feedback %}
-                <li>{{ f }}</li>
-            {% endfor %}
-        </ul>
-    {% endif %}
+    <!-- Grid + overlay -->
+    <div class="grid-wrap" id="grid-wrap">
+      <div id="grid"></div>
+      <div id="notes-overlay"></div>
+    </div>
+  </div>
 
-    <script>
-const VF = Vex.Flow;
+  <div id="notes-display">Notes: (none yet)</div>
 
-let notes = [];
+  {% if result %}
+    <h2>Score: {{ result.score }}/10</h2>
+    <ul>
+      {% for f in result.feedback %}
+        <li>{{ f }}</li>
+      {% endfor %}
+    </ul>
+  {% endif %}
 
-// Create renderer
-const div = document.getElementById("staff");
-const renderer = new VF.Renderer(div, VF.Renderer.Backends.SVG);
-renderer.resize(600, 200);
-const context = renderer.getContext();
+  <script>
+    // =========================
+    // Constants / Layout
+    // =========================
+    const pitchesBottomToTop = [
+      "C4","C#4","D4","D#4","E4",
+      "F4","F#4","G4","G#4","A4","A#4","B4",
+      "C5"
+    ];
 
-// Create stave
-const stave = new VF.Stave(10, 40, 500);
-stave.addClef("treble").addTimeSignature("4/4");
-stave.setContext(context).draw();
+    const rowsTopToBottom = [...pitchesBottomToTop].reverse();
+    const ROWS = rowsTopToBottom.length;
+    const COLS = 32;
 
-const pitches = ["G5","F5","E5","D5","C5","B4","A4","G4","F4","E4","D4","C4"];
-const staffTopY = 40;
-const staffSpacing = 10;
+    const piano   = document.getElementById("piano");
+    const grid    = document.getElementById("grid");
+    const wrap    = document.getElementById("grid-wrap");
+    const overlay = document.getElementById("notes-overlay");
 
-function yToPitch(y) {
-    let index = Math.round((y - staffTopY) / staffSpacing);
-    return pitches[Math.max(0, Math.min(pitches.length - 1, index))];
-}
+    const isBlack = note => note.includes("#");
 
-function drawNotes() {
-    context.clear();
-    stave.setContext(context).draw();
-
-    if (notes.length === 0) return;
-
-    const vexNotes = notes.map(n =>
-        new VF.StaveNote({
-            clef: "treble",
-            keys: [n.toLowerCase()],
-            duration: "q"
-        })
-    );
-
-    VF.Formatter.FormatAndDraw(context, stave, vexNotes);
-}
-
-div.addEventListener("click", function(event){
-    const rect = div.getBoundingClientRect();
-    const y = event.clientY - rect.top;
-
-    const pitch = yToPitch(y);
-    notes.push(pitch);
-
-    document.getElementById("melody-input").value = notes.join(" ");
-    drawNotes();
-});
-
-document.addEventListener("keydown", function(event){
-    if (event.key === "Backspace") {
-        notes.pop();
-        document.getElementById("melody-input").value = notes.join(" ");
-        drawNotes();
+    // read CSS variables (cell size & gap)
+    function cssPx(name) {
+      return parseInt(getComputedStyle(document.documentElement).getPropertyValue(name));
     }
-});
-    </script>
 
-</body>
+    let CELL = cssPx('--cell');
+    let GAP  = cssPx('--gap');
+
+    // ✅ ✅ ✅ FIXED VERSION — FIT OVERLAY TO REAL GRID SIZE
+    function sizeOverlay() {
+      const rect = grid.getBoundingClientRect();
+      overlay.style.width  = rect.width  + "px";
+      overlay.style.height = rect.height + "px";
+    }
+
+    // =========================
+    // Build Piano
+    // =========================
+    rowsTopToBottom.forEach(note => {
+      const k = document.createElement("div");
+      k.className = "key " + (isBlack(note) ? "black" : "white");
+
+      const label = document.createElement("div");
+      label.className = "label";
+      if (!isBlack(note)) label.textContent = note;
+      k.appendChild(label);
+
+      piano.appendChild(k);
+    });
+
+    // =========================
+    // Build Grid
+    // =========================
+    function rowClass(r) {
+      return isBlack(rowsTopToBottom[r]) ? "row-black" : "row-white";
+    }
+
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        const cell = document.createElement("div");
+        cell.className = `cell ${rowClass(r)}`;
+        if (c % 4 === 0) cell.classList.add("beat"); // add bar lines
+        cell.dataset.row = r;
+        cell.dataset.col = c;
+        grid.appendChild(cell);
+      }
+    }
+
+    sizeOverlay();
+
+    // =========================
+    // Notes data model
+    // =========================
+    let notesByRow = Array.from({ length: ROWS }, () => []);
+    let dragging = false;
+    let dragRow = null;
+    let dragStartCol = null;
+    let dragCurrentCol = null;
+
+    function deleteNoteAt(row, col) {
+      const arr = notesByRow[row];
+      const idx = arr.findIndex(n => col >= n.start && col <= n.end);
+      if (idx >= 0) {
+        arr.splice(idx, 1);
+        renderNotes();
+        updateMelody();
+        return true;
+      }
+      return false;
+    }
+
+    // =========================
+    // Mouse interaction logic
+    // =========================
+    grid.addEventListener("mousedown", e => {
+      if (!e.target.classList.contains("cell")) return;
+
+      const row = +e.target.dataset.row;
+      const col = +e.target.dataset.col;
+
+      // Right click = delete
+      if (e.button === 2) {
+        e.preventDefault();
+        deleteNoteAt(row, col);
+        return;
+      }
+
+      // Left click = start dragging
+      dragging = true;
+      dragRow = row;
+      dragStartCol = col;
+      dragCurrentCol = col;
+
+      deleteNoteAt(row, col);
+
+      renderNotes();
+    });
+
+    grid.addEventListener("mousemove", e => {
+      if (!dragging) return;
+      if (!e.target.classList.contains("cell")) return;
+
+      dragCurrentCol = +e.target.dataset.col;
+      renderNotes();
+    });
+
+    document.addEventListener("mouseup", () => {
+      if (!dragging) return;
+
+      const start = Math.min(dragStartCol, dragCurrentCol);
+      const end   = Math.max(dragStartCol, dragCurrentCol);
+
+      notesByRow[dragRow] = notesByRow[dragRow].filter(n => n.end < start || n.start > end);
+      notesByRow[dragRow].push({ start, end });
+      notesByRow[dragRow].sort((a, b) => a.start - b.start);
+
+      dragging = false;
+      dragRow = dragStartCol = dragCurrentCol = null;
+
+      renderNotes();
+      updateMelody();
+    });
+
+    grid.addEventListener("contextmenu", e => {
+      if (e.target.classList.contains("cell")) e.preventDefault();
+    });
+
+    // =========================
+    // Render notes overlay
+    // =========================
+    function renderNotes() {
+      overlay.innerHTML = "";
+
+      const addBlock = (row, start, end, temp = false) => {
+        const block = document.createElement("div");
+        block.className = "note";
+        if (temp) block.style.opacity = 0.5;
+
+        const x = start * (CELL + GAP);
+        const y = row * (CELL + GAP);
+        const width = (end - start + 1) * (CELL + GAP) - GAP;
+
+        block.style.left = x + "px";
+        block.style.top = y + "px";
+        block.style.width = width + "px";
+        block.style.height = CELL + "px";
+
+        block.addEventListener("contextmenu", ev => {
+          ev.preventDefault();
+          deleteNoteAt(row, start);
+        });
+
+        overlay.appendChild(block);
+      };
+
+      for (let r = 0; r < ROWS; r++) {
+        for (const n of notesByRow[r]) {
+          addBlock(r, n.start, n.end, false);
+        }
+      }
+
+      if (dragging && dragRow !== null) {
+        const start = Math.min(dragStartCol, dragCurrentCol);
+        const end = Math.max(dragStartCol, dragCurrentCol);
+        addBlock(dragRow, start, end, true);
+      }
+    }
+
+    // =========================
+    // Convert notes → Melody String
+    // =========================
+    function updateMelody() {
+      const out = [];
+
+      for (let c = 0; c < COLS; c++) {
+        for (let r = 0; r < ROWS; r++) {
+          if (notesByRow[r].some(n => c >= n.start && c <= n.end)) {
+            out.push(rowsTopToBottom[r]);
+          }
+        }
+      }
+
+      const s = out.join(" ");
+      document.getElementById("melody-input").value = s;
+      document.getElementById("notes-display").textContent =
+        s ? ("Notes: " + s) : "Notes: (none yet)";
+    }
+
+    renderNotes();
+    updateMelody();
+
+    // Re-size overlay on resize
+    window.addEventListener("resize", () => {
+      CELL = cssPx('--cell');
+      GAP = cssPx('--gap');
+      sizeOverlay();
+      renderNotes();
+    });
+</script>
+
+ <body>
 </html>
